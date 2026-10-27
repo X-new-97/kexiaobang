@@ -1,0 +1,58 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>课小帮 · 一对一家教备课与学情闭环</title>
+<link rel="stylesheet" href="assets/vendor/weui/weui.min.css">
+<link rel="stylesheet" href="assets/css/main.css?v=9">
+</head>
+<body>
+<!-- 登录页：一期为身份标识（区分不同老师的学生档案），非安全认证 -->
+<div id="login-view" class="login-wrap"></div>
+
+<div id="app-shell" style="display:none">
+<header class="top">
+  <div class="top-inner">
+    <div>
+      <h1>课小帮</h1>
+      <p class="sub">备课 → 授课 → 学情记录 → 家校反馈，全流程闭环</p>
+    </div>
+    <div class="top-right">
+      <span class="who" id="cur-teacher">未登录</span>
+      <span class="cur" id="cur-student">未选择学生</span>
+      <button class="weui-btn weui-btn_default weui-btn_mini" id="btn-reset">恢复演示数据</button>
+      <button class="weui-btn weui-btn_default weui-btn_mini" id="btn-logout">切换账号</button>
+    </div>
+  </div>
+  <nav class="tabs">
+    <button class="tab active" id="tab-students">学生档案</button>
+    <button class="tab" id="tab-plan">智能备课</button>
+    <button class="tab" id="tab-record">课堂记录</button>
+    <button class="tab" id="tab-feedback">课后反馈</button>
+  </nav>
+</header>
+
+<main class="wrap">
+  <section id="view-students"></section>
+  <section id="view-plan" style="display:none"></section>
+  <section id="view-record" style="display:none"></section>
+  <section id="view-feedback" style="display:none"></section>
+</main>
+
+<footer class="foot">
+  演示版：内容由内置知识点体系与规则引擎生成，可解释、可追溯；正式版将接入大模型生成并保留教师审核环节。
+</footer>
+</div>
+
+<div id="toast" class="toast"></div>
+
+<script src="data/knowledge/knowledge-math-g4.js"></script>
+<script src="data/knowledge/question-bank.js"></script>
+<script src="data/samples/students.js"></script>
+<script src="data/knowledge/syllabus.js"></script>
+<script src="assets/js/store.js"></script>
+<script src="assets/js/engine.js"></script>
+<script src="assets/js/app.js"></script>
+</body>
+</html>
