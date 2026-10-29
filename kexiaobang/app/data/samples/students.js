@@ -17,10 +17,10 @@ window.KB_SAMPLE_STUDENTS = [
     },
     lessons: [
       { id: "l1", date: "2026-09-12", kpIds: ["u4-04"], results: { "u4-04-1": "ok", "u4-04-2": "wrong", "u4-04-3": "wrong" }, note: "小数点向左移动时位数不够不会补 0", summary: "正确率 33%" },
-      { id: "l2", date: "2026-09-19", kpIds: ["u4-04", "u4-05"], results: { "u4-04-1": "ok", "u4-04-2": "partial", "u4-05-1": "ok", "u4-05-2": "wrong" }, note: "吨与千克的进率记错", summary: "正确率 50%" },
-      { id: "l3", date: "2026-09-26", kpIds: ["u3-03"], results: { "u3-03-1": "ok", "u3-03-2": "wrong", "u3-03-3": "partial" }, note: "逆用分配律时找不到公因数 36", summary: "正确率 33%" },
-      { id: "l4", date: "2026-10-10", kpIds: ["u4-06", "u6-01"], results: { "u4-06-1": "ok", "u4-06-2": "wrong", "u6-01-1": "ok", "u6-01-2": "partial" }, note: "9.95 保留一位小数写成 10，丢了精度 0", summary: "正确率 50%" },
-      { id: "l5", date: "2026-10-17", kpIds: ["u4-05", "u3-04"], results: { "u4-05-1": "ok", "u4-05-2": "partial", "u4-05-3": "wrong", "u3-04-1": "ok", "u3-04-2": "ok" }, note: "复名数改写 3 千米 50 米不会处理", summary: "正确率 60%" }
+      { id: "l2", date: "2026-09-19", kpIds: ["u4-04", "u4-05"], results: { "u4-04-1": "ok", "u4-04-2": "partial", "u4-05-1": "ok", "u4-05-2": "wrong" }, note: "吨与千克的进率记错", summary: "正确率 63%" },
+      { id: "l3", date: "2026-09-26", kpIds: ["u3-03"], results: { "u3-03-1": "ok", "u3-03-2": "wrong", "u3-03-3": "partial" }, note: "逆用分配律时找不到公因数 36", summary: "正确率 50%" },
+      { id: "l4", date: "2026-10-10", kpIds: ["u4-06", "u6-01"], results: { "u4-06-1": "ok", "u4-06-2": "wrong", "u6-01-1": "ok", "u6-01-2": "partial" }, note: "9.95 保留一位小数写成 10，丢了精度 0", summary: "正确率 63%" },
+      { id: "l5", date: "2026-10-17", kpIds: ["u4-05", "u3-04"], results: { "u4-05-1": "ok", "u4-05-2": "partial", "u4-05-3": "wrong", "u3-04-1": "ok", "u3-04-2": "ok" }, note: "复名数改写 3 千米 50 米不会处理", summary: "正确率 70%" }
     ]
   },
   {
@@ -37,7 +37,7 @@ window.KB_SAMPLE_STUDENTS = [
     },
     lessons: [
       { id: "l1", date: "2026-09-13", kpIds: ["u5-02"], results: { "u5-02-1": "ok", "u5-02-2": "wrong", "u5-02-3": "wrong" }, note: "第三边取值范围的边界判断不清", summary: "正确率 33%" },
-      { id: "l2", date: "2026-09-27", kpIds: ["u8-01"], results: { "u8-01-1": "ok", "u8-01-2": "partial", "u8-01-3": "wrong" }, note: "不会用总数倒推去掉的数", summary: "正确率 33%" },
+      { id: "l2", date: "2026-09-27", kpIds: ["u8-01"], results: { "u8-01-1": "ok", "u8-01-2": "partial", "u8-01-3": "wrong" }, note: "不会用总数倒推去掉的数", summary: "正确率 50%" },
       { id: "l3", date: "2026-10-11", kpIds: ["u9-01"], results: { "u9-01-1": "ok", "u9-01-2": "wrong", "u9-01-3": "wrong" }, note: "假设法会做第一问，换情境就不会迁移", summary: "正确率 33%" }
     ]
   },
@@ -53,8 +53,8 @@ window.KB_SAMPLE_STUDENTS = [
       "u4-01": "weak", "u4-04": "fuzzy", "u6-01": "weak", "u6-02": "weak"
     },
     lessons: [
-      { id: "l1", date: "2026-10-08", kpIds: ["u1-03"], results: { "u1-03-1": "partial", "u1-03-2": "wrong", "u1-03-3": "wrong" }, note: "混合运算顺序不熟，中括号没学过", summary: "正确率 0%" },
-      { id: "l2", date: "2026-10-15", kpIds: ["u6-01"], results: { "u6-01-1": "partial", "u6-01-2": "wrong", "u6-01-3": "wrong" }, note: "习惯末位对齐，小数点没有对齐", summary: "正确率 0%" }
+      { id: "l1", date: "2026-10-08", kpIds: ["u1-03"], results: { "u1-03-1": "partial", "u1-03-2": "wrong", "u1-03-3": "wrong" }, note: "混合运算顺序不熟，中括号没学过", summary: "正确率 17%" },
+      { id: "l2", date: "2026-10-15", kpIds: ["u6-01"], results: { "u6-01-1": "partial", "u6-01-2": "wrong", "u6-01-3": "wrong" }, note: "习惯末位对齐，小数点没有对齐", summary: "正确率 17%" }
     ]
   }
 ];
