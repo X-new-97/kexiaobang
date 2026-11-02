@@ -2363,10 +2363,94 @@ window.KB_SAMPLE_STUDENTS = [
 
   /* ---------- 课后记录 ---------- */
 
+  /* 课次正确率序列（时间正序：旧 → 新），与老师端趋势图同一算法 */
+  function historyOf(stu) {
+    return (stu.lessons || []).map(function (l) {
+      var c = { ok: 0, partial: 0, wrong: 0 };
+      Object.keys(l.results || {}).forEach(function (k) {
+        if (c[l.results[k]] !== undefined) c[l.results[k]]++;
+      });
+      var total = c.ok + c.partial + c.wrong;
+      return { date: l.date, rate: total ? Math.round(((c.ok + c.partial * 0.5) / total) * 100) : 0, total: total };
+    }).sort(function (a, b) { return a.date < b.date ? -1 : (a.date > b.date ? 1 : 0); });
+  }
+
+  /* 正确率折线图：内联 SVG，复用老师端同一套 .chart 样式（渐变 id 加 Stu 后缀避免重复） */
+  function trendChart(his) {
+    var n = his.length;
+    var pts = his.map(function (h, i) {
+      return { x: n === 1 ? 50 : (i / (n - 1)) * 100, y: (1 - h.rate / 100) * 100, h: h };
+    });
+    var line = pts.map(function (p, i) {
+      return (i ? "L" : "M") + p.x.toFixed(2) + " " + p.y.toFixed(2);
+    }).join(" ");
+    var area = line + " L" + pts[n - 1].x.toFixed(2) + " 100 L" + pts[0].x.toFixed(2) + " 100 Z";
+    var grid = [0, 50, 100].map(function (v) {
+      return '<line x1="0" y1="' + v + '" x2="100" y2="' + v +
+        '" stroke="#E6EBF1" stroke-width="1" vector-effect="non-scaling-stroke"/>';
+    }).join("");
+    var dots = pts.map(function (p, i) {
+      var cls = i === 0 ? " first" : (i === n - 1 ? " last" : "");
+      return '<span class="chart-dot" style="left:' + p.x.toFixed(2) + '%;top:' + p.y.toFixed(2) + '%"></span>' +
+        '<span class="chart-val' + cls + '" style="left:' + p.x.toFixed(2) + '%;top:' + p.y.toFixed(2) + '%">' + p.h.rate + '%</span>' +
+        '<span class="chart-date' + cls + '" style="left:' + p.x.toFixed(2) + '%">' + esc(String(p.h.date).slice(5)) + '</span>';
+    }).join("");
+
+    return '<div class="chart">' +
+      '<div class="chart-y"><span>100%</span><span>50%</span><span>0%</span></div>' +
+      '<div class="chart-plot">' +
+        '<svg class="chart-svg" viewBox="0 0 100 100" preserveAspectRatio="none" aria-hidden="true">' +
+          '<defs><linearGradient id="trendFillStu" x1="0" y1="0" x2="0" y2="1">' +
+            '<stop offset="0%" stop-color="#7DA9D9" stop-opacity=".22"/>' +
+            '<stop offset="100%" stop-color="#7DA9D9" stop-opacity="0"/>' +
+          '</linearGradient></defs>' + grid +
+          '<path d="' + area + '" fill="url(#trendFillStu)"/>' +
+          '<path d="' + line + '" fill="none" stroke="#7DA9D9" stroke-width="2.5" ' +
+            'vector-effect="non-scaling-stroke" stroke-linejoin="round" stroke-linecap="round"/>' +
+        '</svg>' + dots +
+      '</div></div>';
+  }
+
   function renderRecords() {
     var stu = ST.student, idx = D.kpIndex();
     var lessons = lessonsDesc(stu);
-    var html = '<div class="card"><h2>我的上课记录</h2>';
+    var html = "";
+
+    /* 先看整体趋势，再看每次课的明细 */
+    if (lessons.length) {
+      var his = historyOf(stu);
+      var rates = his.map(function (h) { return h.rate; });
+      var first = rates[0], lastR = rates[rates.length - 1];
+      var best = Math.max.apply(null, rates);
+      var avg = Math.round(rates.reduce(function (a, b) { return a + b; }, 0) / rates.length);
+      var diff = lastR - first;
+      var verdict, cls;
+      if (his.length < 2) {
+        verdict = "目前只有 1 次课的记录，再上几次课这里就会出现你的进步曲线。";
+        cls = "mid";
+      } else if (diff > 5) {
+        verdict = "从第 1 次的 " + first + "% 提升到最近一次的 " + lastR + "%，进步了 " + diff + " 个百分点，继续保持！";
+        cls = "ok";
+      } else if (diff < -5) {
+        verdict = "最近一次 " + lastR + "% 比第一次低了 " + Math.abs(diff) + " 个百分点，这几块要多练练。";
+        cls = "bad";
+      } else {
+        verdict = "成绩稳定在 " + avg + "% 左右，冲一冲就能再上一个台阶。";
+        cls = "mid";
+      }
+      html += '<div class="card"><h2>我的进步曲线</h2>' +
+        '<p class="muted small">每次课的正确率变化。用的就是老师课堂记录里那份数据，两端看到的完全一致。</p>' +
+        '<div class="stat-row">' + stat("上课次数", his.length, "") + stat("平均正确率", avg + "%", cls) +
+        stat("最好一次", best + "%", "ok") + '</div>';
+      if (his.length >= 2) {
+        html += trendChart(his) + '<div class="tip"><strong>' + verdict + '</strong></div>';
+      } else {
+        html += '<p class="muted small">' + verdict + '</p>';
+      }
+      html += '</div>';
+    }
+
+    html += '<div class="card"><h2>我的上课记录</h2>';
     if (!lessons.length) {
       html += '<p class="muted">还没有上课记录。老师上完课并在「课堂记录」里保存之后，' +
         '这里会列出每次学的内容和老师的备注。</p>';
