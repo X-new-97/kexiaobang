@@ -584,8 +584,10 @@
       return;
     }
     var p = state.plan;
-    var html = '<div class="card"><h2>课堂记录 · 勾选掌握情况</h2>' +
-      '<p class="muted small">每题一键勾选，系统据此更新学情档案并生成课后反馈。</p>';
+    /* 课堂互动小游戏：判定结果直接写入 state.results，玩完即完成课堂记录 */
+    var html = '<div id="game-host"></div>';
+    html += '<div class="card"><h2>课堂记录 · 勾选掌握情况</h2>' +
+      '<p class="muted small">每题一键勾选，系统据此更新学情档案并生成课后反馈；上方小游戏判定后会自动填好。</p>';
     var n = 0;
     p.sections.forEach(function (s) {
       if (!s.questions.length) return;   /* 没题的知识点不渲染，避免空标题 */
@@ -617,6 +619,15 @@
         renderRecord();
       };
     });
+    if (window.KBGame && $("game-host")) {
+      window.KBGame.mount($("game-host"), {
+        plan: p,
+        student: S.get(state.studentId),
+        results: state.results,
+        onUpdate: function (qid, val) { state.results[qid] = val; },
+        onFinish: function () { renderRecord(); }
+      });
+    }
     if ($("btn-fb")) $("btn-fb").onclick = function () {
       var stu = S.get(state.studentId);
       state.feedback = E.buildFeedback(stu, p, state.results);
