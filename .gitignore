@@ -1,0 +1,27 @@
+# 本地环境与项目数据
+.workbuddy/
+.env
+.env.*
+*.local
+
+# 依赖
+node_modules/
+package-lock.json
+yarn.lock
+
+# 密钥（切勿提交）
+*.key
+*.pem
+secrets.json
+config/secrets.*
+
+# 编辑器与系统
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
+
+# 构建产物
+dist/
+build/
+*.log
