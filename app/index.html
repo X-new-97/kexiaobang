@@ -45,6 +45,34 @@
 </footer>
 </div>
 
+<!-- 学生端工作台：同一份学情数据，学生视角 -->
+<div id="student-shell" style="display:none">
+<header class="top">
+  <div class="top-inner">
+    <div>
+      <h1>课小帮 · 学生工作台</h1>
+      <p class="sub" id="stu-sub">课堂互动 · 课后记录 · 作业任务</p>
+    </div>
+    <div class="top-right">
+      <span class="who" id="stu-name">未登录</span>
+      <span class="cur">学生端</span>
+      <button class="weui-btn weui-btn_default weui-btn_mini" id="btn-stu-logout">退出</button>
+    </div>
+  </div>
+  <nav class="tabs">
+    <button class="tab active" id="stab-play">课堂互动</button>
+    <button class="tab" id="stab-records">课后记录</button>
+    <button class="tab" id="stab-homework">作业任务</button>
+  </nav>
+</header>
+
+<main class="wrap">
+  <section id="sview-play"></section>
+  <section id="sview-records" style="display:none"></section>
+  <section id="sview-homework" style="display:none"></section>
+</main>
+</div>
+
 <div id="toast" class="toast"></div>
 
 <script src="data/knowledge/knowledge-math-g4.js"></script>
@@ -53,7 +81,8 @@
 <script src="data/knowledge/syllabus.js"></script>
 <script src="assets/js/store.js"></script>
 <script src="assets/js/engine.js"></script>
-<script src="assets/js/game.js?v=1"></script>
-<script src="assets/js/app.js?v=7"></script>
+<script src="assets/js/game.js?v=2"></script>
+<script src="assets/js/student.js?v=1"></script>
+<script src="assets/js/app.js?v=8"></script>
 </body>
 </html>

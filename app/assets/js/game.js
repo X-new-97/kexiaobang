@@ -132,7 +132,8 @@
       G.banner = "第 1 关 · " + (G.stages[0] ? G.stages[0].name : "");
     } else {
       G.stages = [];
-      G.boss = buildBoss(G.api.student, G.api.plan);
+      /* 学生端没有备课包概念，错题要全部算进来（bossIgnorePlan） */
+      G.boss = buildBoss(G.api.student, G.api.bossIgnorePlan ? null : G.api.plan);
       G.boss.forEach(function (b) { b.hp = b.max; });
       G.banner = G.boss.length ? "错题复仇 · " + G.boss.length + " 只错题怪来袭" : "";
     }
@@ -235,6 +236,8 @@
   function mount(host, api) {
     G.host = host; G.api = api;
     if (!host) return;
+    /* 学生端强制走「学生自评」：自己做完自己评，老师端才有老师判定 */
+    if (api.forceJudge) G.judge = api.forceJudge;
     /* 换了学生或重新生成了备课包，游戏进度作废 */
     if (G.planRef !== api.plan || G.stuRef !== api.student) {
       G.planRef = api.plan; G.stuRef = api.student;
@@ -281,13 +284,17 @@
     stages.forEach(function (s) { qn += s.questions.length; });
 
     var h = '<div class="card game-card"><div class="row-between"><h2>课堂互动 · 小游戏</h2>' +
-      '<span class="tag">游戏结果自动填入下方课堂记录</span></div>' +
-      '<p class="muted small">题目直接来自本次备课包与学生历史错题，判定完即写回学情档案，不用课后再补一遍勾选。</p>';
+      '<span class="tag">' + tagText() + '</span></div>' +
+      '<p class="muted small">' + (G.api.studentMode
+        ? '题目来自你最近一次课的知识点和历史错题。自评结果只作为练习记录，不计入老师的学情档案。'
+        : '题目直接来自本次备课包与学生历史错题，判定完即写回学情档案，不用课后再补一遍勾选。') + '</p>';
 
-    h += '<div class="gm judge"><span class="gm-label">判定方式</span>' +
-      judgeBtn("teacher", "老师判定", "学生口答或纸笔作答，老师在旁打分") +
-      judgeBtn("self", "学生自评", "先不公布答案，学生自报会/不会，再揭晓核对") +
-      '</div>';
+    if (!G.api.hideJudge) {
+      h += '<div class="gm judge"><span class="gm-label">判定方式</span>' +
+        judgeBtn("teacher", "老师判定", "学生口答或纸笔作答，老师在旁打分") +
+        judgeBtn("self", "学生自评", "先不公布答案，学生自报会/不会，再揭晓核对") +
+        '</div>';
+    }
 
     h += '<div class="gm-entry">';
     h += '<div class="ge-card run">' +
@@ -303,8 +310,8 @@
       '<div class="ge-ico">⚔</div>' +
       '<div class="ge-t">错题复仇</div>' +
       '<div class="ge-d">' + (boss.length
-        ? '调出 ' + stu.name + ' 历史标记为不会/半会的 ' + boss.length + ' 道题，这次能消灭几只？'
-        : '暂无历史错题。先用「闯关夺星」积累几次课堂记录，下次课就有复仇关卡了。') + '</div>' +
+        ? '调出' + (G.api.studentMode ? '你' : stu.name) + '历史标记为不会/半会的 ' + boss.length + ' 道题，这次能消灭几只？'
+        : '暂无历史错题。先上一节课积累课堂记录，下次课就有复仇关卡了。') + '</div>' +
       (boss.length ? '<button class="weui-btn weui-btn_primary weui-btn_mini" data-act="start" data-val="boss">开始复仇</button>'
         : '<button class="weui-btn weui-btn_default weui-btn_mini" disabled>暂无错题</button>') +
       '</div>';
@@ -381,9 +388,9 @@
         '<div><strong>正确答案：</strong>' + esc(q.answer) + '</div>' +
         '<div class="muted"><strong>解析：</strong>' + esc(q.solution) + '</div>' +
         (q.errorTag ? '<div class="muted small"><strong>易错点：</strong>' + esc(q.errorTag) + '</div>' : '') +
-        '<div class="gr-mark">记为：' + markText(G.answers[q.id]) +
-        (self ? '　<span class="muted small">（学生自评，老师可更正）</span>' : '') + '</div>';
-      if (self) {
+        '<div class="gr-mark">' + (G.api.studentMode ? '自评：' : '记为：') + markText(G.answers[q.id]) +
+        (self ? '　<span class="muted small">（' + (G.api.studentMode ? '自评只作练习记录，不写入学情档案' : '学生自评，老师可更正') + '）</span>' : '') + '</div>';
+      if (self && !G.api.studentMode) {
         h += '<div class="gfix">' +
           '<span class="muted small">老师更正：</span>' +
           '<button class="chip-btn" data-act="answer" data-val="ok">掌握</button>' +
@@ -430,7 +437,7 @@
 
     var h = '<div class="card game-card"><div class="row-between"><h2>' +
       (isBoss ? '错题复仇 · 结算' : '闯关夺星 · 结算') + '</h2>' +
-      '<span class="tag">已写入下方课堂记录</span></div>';
+      '<span class="tag">' + tagText() + '</span></div>';
 
     h += '<div class="gresult"><div class="gr-stars">' + bigStars(s.star) + '</div>' +
       '<div class="gr-rate">' + s.rate + '%</div>' +
@@ -441,11 +448,20 @@
       (isBoss ? stat("消灭", s.killed + "/" + s.bossTotal, s.killed === s.bossTotal ? "ok" : "mid") : stat("最高连对", s.best, "ok")) +
       '</div>';
 
-    h += '<div class="tip"><strong>课堂记录已自动勾选：</strong>下方每题的掌握 / 半会 / 不会已按本次判定填好，' +
-      '老师扫一眼微调即可点「保存并生成课后反馈」。</div>';
-    if (isBoss) {
-      h += '<div class="tip warn"><strong>复仇结果怎么用：</strong>本次消灭的错题会从下节课的复仇清单里移除；' +
-        '没消灭的会继续留在薄弱清单里，并影响下次备课的推荐顺序。</div>';
+    if (G.api.studentMode) {
+      h += '<div class="tip"><strong>这是练习记录：</strong>自评结果保存在本机，不写进老师的学情档案——' +
+        '正式的成绩只由老师课堂判定产生，避免学生自己打分把学情数据带偏。</div>';
+      if (s.wrong || s.partial) {
+        h += '<div class="tip warn"><strong>还没拿下的题：</strong>可以去「作业任务」里再练一遍，' +
+          '老师下次备课也会优先照顾这些知识点。</div>';
+      }
+    } else {
+      h += '<div class="tip"><strong>课堂记录已自动勾选：</strong>下方每题的掌握 / 半会 / 不会已按本次判定填好，' +
+        '老师扫一眼微调即可点「保存并生成课后反馈」。</div>';
+      if (isBoss) {
+        h += '<div class="tip warn"><strong>复仇结果怎么用：</strong>本次消灭的错题会从下节课的复仇清单里移除；' +
+          '没消灭的会继续留在薄弱清单里，并影响下次备课的推荐顺序。</div>';
+      }
     }
 
     h += '<div class="actions">' +
@@ -453,6 +469,11 @@
       '<button class="weui-btn weui-btn_default" data-act="close">收起</button></div>';
     h += '</div>';
     return h;
+  }
+
+  /* 顶部徽标文案：老师端强调写入记录，学生端强调只作练习 */
+  function tagText() {
+    return G.api && G.api.studentMode ? "自评练习 · 不写入学情档案" : "游戏结果自动填入下方课堂记录";
   }
 
   function bigStars(n) {

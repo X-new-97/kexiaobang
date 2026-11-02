@@ -673,6 +673,34 @@ h3 { font-size: 14px; font-weight: 700; margin: 20px 0 8px; color: var(--text-su
 </footer>
 </div>
 
+<!-- 学生端工作台：同一份学情数据，学生视角 -->
+<div id="student-shell" style="display:none">
+<header class="top">
+  <div class="top-inner">
+    <div>
+      <h1>课小帮 · 学生工作台</h1>
+      <p class="sub" id="stu-sub">课堂互动 · 课后记录 · 作业任务</p>
+    </div>
+    <div class="top-right">
+      <span class="who" id="stu-name">未登录</span>
+      <span class="cur">学生端</span>
+      <button class="weui-btn weui-btn_default weui-btn_mini" id="btn-stu-logout">退出</button>
+    </div>
+  </div>
+  <nav class="tabs">
+    <button class="tab active" id="stab-play">课堂互动</button>
+    <button class="tab" id="stab-records">课后记录</button>
+    <button class="tab" id="stab-homework">作业任务</button>
+  </nav>
+</header>
+
+<main class="wrap">
+  <section id="sview-play"></section>
+  <section id="sview-records" style="display:none"></section>
+  <section id="sview-homework" style="display:none"></section>
+</main>
+</div>
+
 <div id="toast" class="toast"></div>
 
 <script>
@@ -1094,6 +1122,8 @@ window.KB_SAMPLE_STUDENTS = [
   var SESSION_KEY = "kexiaobang.session.v1";
   var STUDENTS_PREFIX = "kexiaobang.students.v2.";
   var LEGACY_KEY = "kexiaobang.students.v1";
+  var STU_SESSION_KEY = "kexiaobang.student.session.v1";
+  var HW_PREFIX = "kexiaobang.homework.v1.";
   var DEMO_ID = "t-demo";
 
   var STATUS = { mastered: "掌握", fuzzy: "模糊", weak: "薄弱" };
@@ -1244,6 +1274,38 @@ window.KB_SAMPLE_STUDENTS = [
       for (var i = 0; i < list.length; i++) if (list[i].id !== id) next.push(list[i]);
       Store.saveAll(next);
     },
+    /* ---------- 学生端：按指定老师账号读取（不依赖当前登录的是谁） ---------- */
+    allOf: function (teacherId) {
+      var raw = null;
+      try { raw = localStorage.getItem(STUDENTS_PREFIX + teacherId); } catch (e) {}
+      if (raw) { try { return JSON.parse(raw); } catch (e) {} }
+      return [];
+    },
+    getOf: function (teacherId, studentId) {
+      var list = Store.allOf(teacherId);
+      for (var i = 0; i < list.length; i++) if (list[i].id === studentId) return list[i];
+      return null;
+    },
+    /* 学生登录用：列出本机全部学生（跨老师账号，附带所属老师） */
+    allAcrossTeachers: function () {
+      Teacher.ensureDemo();
+      var teachers = Teacher.all(), out = [];
+      try {
+        for (var i = 0; i < localStorage.length; i++) {
+          var k = localStorage.key(i);
+          if (!k || k.indexOf(STUDENTS_PREFIX) !== 0) continue;
+          var tid = k.slice(STUDENTS_PREFIX.length), list = null;
+          try { list = JSON.parse(localStorage.getItem(k)); } catch (e) {}
+          if (!list || !list.length) continue;
+          var t = null;
+          for (var j = 0; j < teachers.length; j++) if (teachers[j].id === tid) t = teachers[j];
+          for (var m = 0; m < list.length; m++) {
+            out.push({ teacherId: tid, teacherName: t ? t.name : "", student: list[m] });
+          }
+        }
+      } catch (e) {}
+      return out;
+    },
     reset: function () {
       try { localStorage.removeItem(studentsKey()); } catch (e) {}
     },
@@ -1253,6 +1315,30 @@ window.KB_SAMPLE_STUDENTS = [
       try { raw = localStorage.getItem(key); } catch (e) {}
       if (!raw) return 0;
       try { return JSON.parse(raw).length; } catch (e) { return 0; }
+    }
+  };
+
+  /* ---------- 学生端登录态 ----------
+   * 一期同样是身份标识：点名字即进入，二期接微信登录后由 openid 对应本人。
+   */
+  var StuSession = {
+    get: function () { return readJSON(STU_SESSION_KEY, null); },
+    set: function (teacherId, studentId) { writeJSON(STU_SESSION_KEY, { teacherId: teacherId, studentId: studentId }); },
+    clear: function () { try { localStorage.removeItem(STU_SESSION_KEY); } catch (e) {} }
+  };
+
+  /* ---------- 作业完成状态 ----------
+   * 只记学生本地的完成打勾，属于“练习记录”，不参与学情计算、不写回学生档案。
+   */
+  var Homework = {
+    key: function (teacherId, studentId) { return HW_PREFIX + teacherId + "." + studentId; },
+    get: function (teacherId, studentId) { return readJSON(Homework.key(teacherId, studentId), {}); },
+    mark: function (teacherId, studentId, qid, done) {
+      var m = Homework.get(teacherId, studentId);
+      if (done) m[qid] = new Date().toISOString().slice(0, 10);
+      else delete m[qid];
+      writeJSON(Homework.key(teacherId, studentId), m);
+      return m;
     }
   };
 
@@ -1361,6 +1447,8 @@ window.KB_SAMPLE_STUDENTS = [
   };
 
   window.KBStore = Store;
+  window.KBStuSession = StuSession;
+  window.KBHomework = Homework;
   window.KBTeacher = Teacher;
   window.KBData = KB;
   window.KBAnalyze = Analyze;
@@ -1737,7 +1825,8 @@ window.KB_SAMPLE_STUDENTS = [
       G.banner = "第 1 关 · " + (G.stages[0] ? G.stages[0].name : "");
     } else {
       G.stages = [];
-      G.boss = buildBoss(G.api.student, G.api.plan);
+      /* 学生端没有备课包概念，错题要全部算进来（bossIgnorePlan） */
+      G.boss = buildBoss(G.api.student, G.api.bossIgnorePlan ? null : G.api.plan);
       G.boss.forEach(function (b) { b.hp = b.max; });
       G.banner = G.boss.length ? "错题复仇 · " + G.boss.length + " 只错题怪来袭" : "";
     }
@@ -1840,6 +1929,8 @@ window.KB_SAMPLE_STUDENTS = [
   function mount(host, api) {
     G.host = host; G.api = api;
     if (!host) return;
+    /* 学生端强制走「学生自评」：自己做完自己评，老师端才有老师判定 */
+    if (api.forceJudge) G.judge = api.forceJudge;
     /* 换了学生或重新生成了备课包，游戏进度作废 */
     if (G.planRef !== api.plan || G.stuRef !== api.student) {
       G.planRef = api.plan; G.stuRef = api.student;
@@ -1886,13 +1977,17 @@ window.KB_SAMPLE_STUDENTS = [
     stages.forEach(function (s) { qn += s.questions.length; });
 
     var h = '<div class="card game-card"><div class="row-between"><h2>课堂互动 · 小游戏</h2>' +
-      '<span class="tag">游戏结果自动填入下方课堂记录</span></div>' +
-      '<p class="muted small">题目直接来自本次备课包与学生历史错题，判定完即写回学情档案，不用课后再补一遍勾选。</p>';
+      '<span class="tag">' + tagText() + '</span></div>' +
+      '<p class="muted small">' + (G.api.studentMode
+        ? '题目来自你最近一次课的知识点和历史错题。自评结果只作为练习记录，不计入老师的学情档案。'
+        : '题目直接来自本次备课包与学生历史错题，判定完即写回学情档案，不用课后再补一遍勾选。') + '</p>';
 
-    h += '<div class="gm judge"><span class="gm-label">判定方式</span>' +
-      judgeBtn("teacher", "老师判定", "学生口答或纸笔作答，老师在旁打分") +
-      judgeBtn("self", "学生自评", "先不公布答案，学生自报会/不会，再揭晓核对") +
-      '</div>';
+    if (!G.api.hideJudge) {
+      h += '<div class="gm judge"><span class="gm-label">判定方式</span>' +
+        judgeBtn("teacher", "老师判定", "学生口答或纸笔作答，老师在旁打分") +
+        judgeBtn("self", "学生自评", "先不公布答案，学生自报会/不会，再揭晓核对") +
+        '</div>';
+    }
 
     h += '<div class="gm-entry">';
     h += '<div class="ge-card run">' +
@@ -1908,8 +2003,8 @@ window.KB_SAMPLE_STUDENTS = [
       '<div class="ge-ico">⚔</div>' +
       '<div class="ge-t">错题复仇</div>' +
       '<div class="ge-d">' + (boss.length
-        ? '调出 ' + stu.name + ' 历史标记为不会/半会的 ' + boss.length + ' 道题，这次能消灭几只？'
-        : '暂无历史错题。先用「闯关夺星」积累几次课堂记录，下次课就有复仇关卡了。') + '</div>' +
+        ? '调出' + (G.api.studentMode ? '你' : stu.name) + '历史标记为不会/半会的 ' + boss.length + ' 道题，这次能消灭几只？'
+        : '暂无历史错题。先上一节课积累课堂记录，下次课就有复仇关卡了。') + '</div>' +
       (boss.length ? '<button class="weui-btn weui-btn_primary weui-btn_mini" data-act="start" data-val="boss">开始复仇</button>'
         : '<button class="weui-btn weui-btn_default weui-btn_mini" disabled>暂无错题</button>') +
       '</div>';
@@ -1986,9 +2081,9 @@ window.KB_SAMPLE_STUDENTS = [
         '<div><strong>正确答案：</strong>' + esc(q.answer) + '</div>' +
         '<div class="muted"><strong>解析：</strong>' + esc(q.solution) + '</div>' +
         (q.errorTag ? '<div class="muted small"><strong>易错点：</strong>' + esc(q.errorTag) + '</div>' : '') +
-        '<div class="gr-mark">记为：' + markText(G.answers[q.id]) +
-        (self ? '　<span class="muted small">（学生自评，老师可更正）</span>' : '') + '</div>';
-      if (self) {
+        '<div class="gr-mark">' + (G.api.studentMode ? '自评：' : '记为：') + markText(G.answers[q.id]) +
+        (self ? '　<span class="muted small">（' + (G.api.studentMode ? '自评只作练习记录，不写入学情档案' : '学生自评，老师可更正') + '）</span>' : '') + '</div>';
+      if (self && !G.api.studentMode) {
         h += '<div class="gfix">' +
           '<span class="muted small">老师更正：</span>' +
           '<button class="chip-btn" data-act="answer" data-val="ok">掌握</button>' +
@@ -2035,7 +2130,7 @@ window.KB_SAMPLE_STUDENTS = [
 
     var h = '<div class="card game-card"><div class="row-between"><h2>' +
       (isBoss ? '错题复仇 · 结算' : '闯关夺星 · 结算') + '</h2>' +
-      '<span class="tag">已写入下方课堂记录</span></div>';
+      '<span class="tag">' + tagText() + '</span></div>';
 
     h += '<div class="gresult"><div class="gr-stars">' + bigStars(s.star) + '</div>' +
       '<div class="gr-rate">' + s.rate + '%</div>' +
@@ -2046,11 +2141,20 @@ window.KB_SAMPLE_STUDENTS = [
       (isBoss ? stat("消灭", s.killed + "/" + s.bossTotal, s.killed === s.bossTotal ? "ok" : "mid") : stat("最高连对", s.best, "ok")) +
       '</div>';
 
-    h += '<div class="tip"><strong>课堂记录已自动勾选：</strong>下方每题的掌握 / 半会 / 不会已按本次判定填好，' +
-      '老师扫一眼微调即可点「保存并生成课后反馈」。</div>';
-    if (isBoss) {
-      h += '<div class="tip warn"><strong>复仇结果怎么用：</strong>本次消灭的错题会从下节课的复仇清单里移除；' +
-        '没消灭的会继续留在薄弱清单里，并影响下次备课的推荐顺序。</div>';
+    if (G.api.studentMode) {
+      h += '<div class="tip"><strong>这是练习记录：</strong>自评结果保存在本机，不写进老师的学情档案——' +
+        '正式的成绩只由老师课堂判定产生，避免学生自己打分把学情数据带偏。</div>';
+      if (s.wrong || s.partial) {
+        h += '<div class="tip warn"><strong>还没拿下的题：</strong>可以去「作业任务」里再练一遍，' +
+          '老师下次备课也会优先照顾这些知识点。</div>';
+      }
+    } else {
+      h += '<div class="tip"><strong>课堂记录已自动勾选：</strong>下方每题的掌握 / 半会 / 不会已按本次判定填好，' +
+        '老师扫一眼微调即可点「保存并生成课后反馈」。</div>';
+      if (isBoss) {
+        h += '<div class="tip warn"><strong>复仇结果怎么用：</strong>本次消灭的错题会从下节课的复仇清单里移除；' +
+          '没消灭的会继续留在薄弱清单里，并影响下次备课的推荐顺序。</div>';
+      }
     }
 
     h += '<div class="actions">' +
@@ -2058,6 +2162,11 @@ window.KB_SAMPLE_STUDENTS = [
       '<button class="weui-btn weui-btn_default" data-act="close">收起</button></div>';
     h += '</div>';
     return h;
+  }
+
+  /* 顶部徽标文案：老师端强调写入记录，学生端强调只作练习 */
+  function tagText() {
+    return G.api && G.api.studentMode ? "自评练习 · 不写入学情档案" : "游戏结果自动填入下方课堂记录";
   }
 
   function bigStars(n) {
@@ -2070,6 +2179,283 @@ window.KB_SAMPLE_STUDENTS = [
   }
 
   window.KBGame = { mount: mount, reset: reset };
+})();
+
+</script>
+<script>
+/* 学生端工作台：课堂互动 / 课后记录 / 作业任务
+ * ---------------------------------------------------------------
+ * 与老师端共用同一份学生数据（kexiaobang.students.v2.<老师id>），只是换个视角看：
+ *   课堂互动 —— 复用 KBGame，强制「学生自评」，结果只留在本地不写回学情；
+ *   课后记录 —— 直接展示老师保存的 lessons，数据不需要任何转换；
+ *   作业任务 —— 取最近一次课里标为「半会 / 不会」的题自动生成，老师无需额外布置。
+ * 作业完成状态存在独立分区 kexiaobang.homework.v1.<老师id>.<学生id>，
+ * 属于练习记录，不参与学情计算——正式成绩只由老师课堂判定产生。
+ */
+(function () {
+  "use strict";
+
+  var S = window.KBStore, D = window.KBData, HW = window.KBHomework;
+  var FALLBACK_KEY = "math-g4b";
+
+  var ST = {
+    tab: "play",
+    teacherId: null, studentId: null,
+    student: null,        /* 缓存同一个对象引用，避免游戏模块误判为“换人”而重置进度 */
+    practicePlan: null,   /* 练习包只存在于内存，不落盘、不影响老师端 */
+    playResults: {},      /* 自评结果，本地留存 */
+    onLogout: null
+  };
+
+  function $(id) { return document.getElementById(id); }
+  function esc(s) {
+    return String(s == null ? "" : s).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+  }
+  function toast(msg) {
+    var t = $("toast");
+    if (!t) return;
+    t.textContent = msg;
+    t.className = "toast show";
+    clearTimeout(t._timer);
+    t._timer = setTimeout(function () { t.className = "toast"; }, 2600);
+  }
+  function lessonsDesc(stu) {
+    return (stu.lessons || []).slice().sort(function (a, b) { return a.date < b.date ? 1 : -1; });
+  }
+  function stat(label, num, cls) {
+    return '<div class="stat ' + cls + '"><div class="stat-num">' + num + '</div><div class="stat-label">' + label + '</div></div>';
+  }
+
+  /* ---------- 进入 / 退出 ---------- */
+
+  function boot(teacherId, studentId, onLogout) {
+    ST.teacherId = teacherId; ST.studentId = studentId; ST.onLogout = onLogout;
+    ST.student = S.getOf(teacherId, studentId);
+    if (!ST.student) { if (onLogout) onLogout(); return; }
+    /* 切到该学生所用教材，题库索引随之切换 */
+    if (window.KB_Syllabus) window.KB_Syllabus.setCurrent(ST.student.syllabus || FALLBACK_KEY);
+
+    ST.practicePlan = null; ST.playResults = {}; ST.tab = "play";
+    if (window.KBGame) window.KBGame.reset();
+
+    $("login-view").style.display = "none";
+    $("app-shell").style.display = "none";
+    $("student-shell").style.display = "";
+    $("stu-name").textContent = ST.student.name;
+    $("stu-sub").textContent = "课堂互动 · 课后记录 · 作业任务";
+    $("btn-stu-logout").onclick = logout;
+    ["play", "records", "homework"].forEach(function (t) {
+      var b = $("stab-" + t);
+      if (b) b.onclick = function () { setTab(t); };
+    });
+    setTab("play");
+  }
+
+  function logout() {
+    if (window.KBStuSession) window.KBStuSession.clear();
+    if (window.KBGame) window.KBGame.reset();
+    $("student-shell").style.display = "none";
+    if (ST.onLogout) ST.onLogout();
+  }
+
+  function setTab(t) {
+    ST.tab = t;
+    ["play", "records", "homework"].forEach(function (x) {
+      var b = $("stab-" + x), v = $("sview-" + x);
+      if (b) b.className = "tab" + (x === t ? " active" : "");
+      if (v) v.style.display = x === t ? "block" : "none";
+    });
+    render();
+    try { window.scrollTo(0, 0); } catch (e) {}
+  }
+
+  function render() {
+    if (ST.tab === "records") renderRecords();
+    else if (ST.tab === "homework") renderHomework();
+    else renderPlay();
+  }
+
+  /* ---------- 课堂互动 ---------- */
+
+  /* 练习包：优先最近一次课的知识点，其次薄弱知识点，最后兜底取有题的知识点。
+   * 只在内存里，不写入任何存储。 */
+  function buildPracticePlan(stu) {
+    if (ST.practicePlan) return ST.practicePlan;
+    var idx = D.kpIndex(), kpIds = [];
+    var lessons = lessonsDesc(stu);
+    if (lessons.length && lessons[0].kpIds && lessons[0].kpIds.length) {
+      kpIds = lessons[0].kpIds.slice(0, 3);
+    }
+    if (!kpIds.length) {
+      var m = stu.mastery || {};
+      Object.keys(m).forEach(function (id) {
+        if (kpIds.length < 3 && (m[id] === "weak" || m[id] === "fuzzy") && idx[id]) kpIds.push(id);
+      });
+    }
+    if (!kpIds.length) {
+      var all = D.allKps ? D.allKps() : [];
+      for (var i = 0; i < all.length && kpIds.length < 3; i++) {
+        if (D.questionsOf(all[i].id).length) kpIds.push(all[i].id);
+      }
+    }
+    var sections = [];
+    kpIds.forEach(function (id) {
+      var item = idx[id];
+      if (!item) return;
+      var qs = [];
+      [1, 2, 3].forEach(function (lv) {
+        var arr = D.questionsOf(id);
+        for (var i = 0; i < arr.length; i++) {
+          if (arr[i].level === lv) { qs.push({ q: arr[i] }); break; }
+        }
+      });
+      if (qs.length) sections.push({ kpId: id, kpName: item.kp.name, unitName: item.unit.name, questions: qs });
+    });
+    ST.practicePlan = sections.length ? { kpIds: sections.map(function (s) { return s.kpId; }), sections: sections } : null;
+    return ST.practicePlan;
+  }
+
+  function renderPlay() {
+    var stu = ST.student, plan = buildPracticePlan(stu);
+    var host = $("sview-play");
+    var html = '<div id="stu-game-host"></div>';
+    html += '<div class="card"><h2>怎么用</h2>' +
+      '<p class="muted small">闯关夺星练的是你最近一次课的知识点，错题复仇打的是你自己历史上的错题怪。' +
+      '做完先自己选「我会做 / 有点卡 / 不会做」，然后才会揭晓答案和解析。</p>' +
+      '<div class="tip"><strong>自评不计入成绩：</strong>这里的结果只保存在你自己的设备上，' +
+      '不会写进老师的学情档案——老师看到的掌握情况，仍然以上课时的判定为准。</div></div>';
+    host.innerHTML = html;
+
+    var g = $("stu-game-host");
+    if (window.KBGame && g && plan) {
+      window.KBGame.mount(g, {
+        plan: plan,
+        student: stu,
+        results: ST.playResults,
+        studentMode: true,      /* 文案切换：强调是练习记录 */
+        hideJudge: true,        /* 学生端不显示判定方式切换 */
+        forceJudge: "self",     /* 强制学生自评 */
+        bossIgnorePlan: true,   /* 学生没有备课包，历史错题全部算进来 */
+        onUpdate: function (qid, val) { ST.playResults[qid] = val; },
+        onFinish: function () { renderPlay(); }
+      });
+    } else if (g) {
+      g.innerHTML = '<div class="card"><p class="muted">暂无可练习的题目。</p></div>';
+    }
+  }
+
+  /* ---------- 课后记录 ---------- */
+
+  function renderRecords() {
+    var stu = ST.student, idx = D.kpIndex();
+    var lessons = lessonsDesc(stu);
+    var html = '<div class="card"><h2>我的上课记录</h2>';
+    if (!lessons.length) {
+      html += '<p class="muted">还没有上课记录。老师上完课并在「课堂记录」里保存之后，' +
+        '这里会列出每次学的内容和老师的备注。</p>';
+    } else {
+      html += '<p class="muted small">这份数据和老师端看到的是同一份——老师课上勾选并保存，你这边立刻就能看到。</p>';
+      html += '<div class="lesson-list">';
+      lessons.forEach(function (l) {
+        var names = (l.kpIds || []).map(function (id) {
+          return idx[id] ? idx[id].kp.name : id;
+        }).join("、");
+        var c = { ok: 0, partial: 0, wrong: 0 };
+        Object.keys(l.results || {}).forEach(function (k) {
+          if (c[l.results[k]] !== undefined) c[l.results[k]]++;
+        });
+        var total = c.ok + c.partial + c.wrong;
+        var rate = total ? Math.round(((c.ok + c.partial * 0.5) / total) * 100) : 0;
+        html += '<div class="lesson-row">' +
+          '<div class="lesson-date">' + esc(String(l.date).slice(5)) + '</div>' +
+          '<div class="lesson-kps">' + esc(names || "—") +
+          '<small>答对 ' + c.ok + ' · 半会 ' + c.partial + ' · 不会 ' + c.wrong +
+          (l.note ? '　|　老师备注：' + esc(l.note) : '') + '</small></div>' +
+          '<div class="lesson-rate">' + esc(l.summary || ("正确率 " + rate + "%")) + '</div></div>';
+      });
+      html += '</div>';
+    }
+    html += '</div>';
+    $("sview-records").innerHTML = html;
+  }
+
+  /* ---------- 作业任务 ---------- */
+
+  function renderHomework() {
+    var stu = ST.student, idx = D.kpIndex();
+    var lessons = lessonsDesc(stu);
+    var last = lessons[0];
+    var host = $("sview-homework");
+    var html = '<div class="card"><h2>本次作业</h2>';
+
+    if (!last) {
+      html += '<p class="muted">还没有作业。上完第一节课后，老师课上标为「半会 / 不会」的题会自动出现在这里。</p>';
+    } else {
+      var items = [];
+      Object.keys(last.results || {}).forEach(function (qid) {
+        var v = last.results[qid];
+        if (v !== "partial" && v !== "wrong") return;
+        var f = D.questionById(qid);
+        if (!f) return;
+        items.push({ q: f.q, kpName: idx[f.kpId] ? idx[f.kpId].kp.name : "", val: v });
+      });
+
+      if (!items.length) {
+        html += '<p class="muted">' + esc(last.date) + ' 那次课全部答对了，这次没有需要重做的题。<br>' +
+          '想练手可以去「课堂互动」玩闯关夺星。</p>';
+      } else {
+        var done = HW.get(ST.teacherId, ST.studentId);
+        var n = 0;
+        items.forEach(function (x) { if (done[x.q.id]) n++; });
+        html += '<p class="muted small">来自 ' + esc(last.date) + ' 的课堂记录：课上被标为「半会 / 不会」的题，' +
+          '自动变成这次的作业——老师不用另外布置。</p>';
+        html += '<div class="stat-row">' + stat("作业题数", items.length, "mid") + stat("已完成", n, "ok") + '</div>';
+        html += '<ul class="qlist">';
+        items.forEach(function (x, i) {
+          var on = !!done[x.q.id];
+          html += '<li class="qitem">' +
+            '<div class="row-between"><span class="qtag">' + esc(x.kpName) + '</span>' +
+            '<span class="tag ' + (x.val === "wrong" ? "weak" : "fuzzy") + '">' + (x.val === "wrong" ? "不会" : "半会") + '</span></div>' +
+            '<div class="stem">' + (i + 1) + '. ' + esc(x.q.stem) + '</div>' +
+            '<div class="muted small">' + (x.val === "wrong" ? "照着解析重做一遍" : "先讲一遍思路再做") + '</div>' +
+            '<div class="qans" id="hw-ans-' + i + '" style="display:none">' +
+            '<div><strong>答案：</strong>' + esc(x.q.answer) + '</div>' +
+            '<div class="muted"><strong>解析：</strong>' + esc(x.q.solution) + '</div></div>' +
+            '<div class="qbtns">' +
+            '<button class="weui-btn weui-btn_default weui-btn_mini" data-hwans="' + i + '">查看解析</button>' +
+            '<button class="weui-btn weui-btn_mini weui-btn_' + (on ? "primary" : "default") + '" data-hw="' + esc(x.q.id) + '">' +
+            (on ? "已完成，点我撤销" : "我完成了") + '</button>' +
+            '</div></li>';
+        });
+        html += '</ul>';
+        if (n === items.length) html += '<div class="tip"><strong>全部完成了：</strong>下次课老师会重新考这几道题，加油。</div>';
+        html += '<div class="tip warn"><strong>打勾只是练习记录：</strong>存在你自己的设备上，' +
+          '不会写进学情档案；老师看到的掌握情况仍以课堂判定为准。</div>';
+      }
+    }
+    html += '</div>';
+    host.innerHTML = html;
+
+    Array.prototype.forEach.call(host.querySelectorAll("[data-hw]"), function (b) {
+      b.onclick = function () {
+        var qid = b.getAttribute("data-hw");
+        var cur = HW.get(ST.teacherId, ST.studentId)[qid];
+        HW.mark(ST.teacherId, ST.studentId, qid, !cur);
+        if (!cur) toast("已标记完成");
+        renderHomework();
+      };
+    });
+    Array.prototype.forEach.call(host.querySelectorAll("[data-hwans]"), function (b) {
+      b.onclick = function () {
+        var box = $("hw-ans-" + b.getAttribute("data-hwans"));
+        var show = box.style.display === "none";
+        box.style.display = show ? "block" : "none";
+        b.textContent = show ? "收起解析" : "查看解析";
+      };
+    });
+  }
+
+  window.KBStudent = { boot: boot, logout: logout, render: render };
 })();
 
 </script>
@@ -2158,9 +2544,30 @@ window.KB_SAMPLE_STUDENTS = [
       });
       h += '</div></div>';
     }
+    /* 学生入口：列出本机全部学生（跨老师账号），点名字直接进入学生工作台 */
+    h += '<div class="login-sep"><span>我是学生</span></div><div class="chips">';
+    var stus = S.allAcrossTeachers ? S.allAcrossTeachers() : [];
+    if (!stus.length) {
+      h += '<span class="muted small">本机还没有学生档案，先用老师账号添加学生。</span>';
+    }
+    stus.forEach(function (x) {
+      h += '<button class="chip-btn" data-stu="' + esc(x.teacherId) + '|' + esc(x.studentId) + '">' +
+        esc(x.student.name) + (x.teacherName ? ' <em>' + esc(x.teacherName) + '的学生</em>' : '') + '</button>';
+    });
+    h += '</div><p class="muted small">点名字即进入学生工作台：闯关练习、看课后记录、做作业。' +
+      '演示版不校验身份，二期接微信登录后由扫码对应本人学情。</p>';
+
     h += '<p class="login-note">演示版不校验密码：登录用于区分不同老师的数据，二期接入微信登录与云数据库后才是真实账号体系。</p>' +
       '</div>';
     return h;
+  }
+
+  /* 学生端登录：记住 {老师id, 学生id}，进入独立的学生工作台 */
+  function bootStudent(teacherId, studentId) {
+    if (!window.KBStudent) { showLogin(); return; }
+    if (window.KBStuSession) window.KBStuSession.set(teacherId, studentId);
+    T.logout();   /* 同时只保留一种身份，避免两个工作台都有登录态 */
+    window.KBStudent.boot(teacherId, studentId, showLogin);
   }
 
   function bindLogin() {
@@ -2186,6 +2593,12 @@ window.KB_SAMPLE_STUDENTS = [
         bootWorkspace(T.current(), false);
       };
     });
+    Array.prototype.forEach.call(document.querySelectorAll("[data-stu]"), function (b) {
+      b.onclick = function () {
+        var p = b.getAttribute("data-stu").split("|");
+        bootStudent(p[0], p[1]);
+      };
+    });
   }
 
   function showLogin() {
@@ -2194,13 +2607,16 @@ window.KB_SAMPLE_STUDENTS = [
     v.style.display = "";
     v.innerHTML = loginHtml();
     $("app-shell").style.display = "none";
+    if ($("student-shell")) $("student-shell").style.display = "none";
     bindLogin();
   }
 
   function bootWorkspace(teacher, created) {
     if (!teacher) { showLogin(); return; }
+    if (window.KBStuSession) window.KBStuSession.clear();
     $("login-view").style.display = "none";
     $("app-shell").style.display = "";
+    if ($("student-shell")) $("student-shell").style.display = "none";
     state.studentId = null;
     state.showAdd = false;
     resetFlow();
@@ -2822,6 +3238,7 @@ window.KB_SAMPLE_STUDENTS = [
     var out = $("btn-logout");
     if (out) out.onclick = function () {
       T.logout();
+      if (window.KBStuSession) window.KBStuSession.clear();
       state.studentId = null;
       state.showAdd = false;
       resetFlow();
@@ -2829,8 +3246,11 @@ window.KB_SAMPLE_STUDENTS = [
       toast("已退出，数据仍保留在本机");
     };
 
+    /* 刷新恢复：学生端会话优先，其次老师端，都没有则回登录页 */
+    var ss = window.KBStuSession ? window.KBStuSession.get() : null;
     var cur = T.current();
-    if (cur) bootWorkspace(cur, false);
+    if (ss) bootStudent(ss.teacherId, ss.studentId);
+    else if (cur) bootWorkspace(cur, false);
     else showLogin();
   });
 

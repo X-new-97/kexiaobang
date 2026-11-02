@@ -14,6 +14,8 @@
   var SESSION_KEY = "kexiaobang.session.v1";
   var STUDENTS_PREFIX = "kexiaobang.students.v2.";
   var LEGACY_KEY = "kexiaobang.students.v1";
+  var STU_SESSION_KEY = "kexiaobang.student.session.v1";
+  var HW_PREFIX = "kexiaobang.homework.v1.";
   var DEMO_ID = "t-demo";
 
   var STATUS = { mastered: "掌握", fuzzy: "模糊", weak: "薄弱" };
@@ -164,6 +166,38 @@
       for (var i = 0; i < list.length; i++) if (list[i].id !== id) next.push(list[i]);
       Store.saveAll(next);
     },
+    /* ---------- 学生端：按指定老师账号读取（不依赖当前登录的是谁） ---------- */
+    allOf: function (teacherId) {
+      var raw = null;
+      try { raw = localStorage.getItem(STUDENTS_PREFIX + teacherId); } catch (e) {}
+      if (raw) { try { return JSON.parse(raw); } catch (e) {} }
+      return [];
+    },
+    getOf: function (teacherId, studentId) {
+      var list = Store.allOf(teacherId);
+      for (var i = 0; i < list.length; i++) if (list[i].id === studentId) return list[i];
+      return null;
+    },
+    /* 学生登录用：列出本机全部学生（跨老师账号，附带所属老师） */
+    allAcrossTeachers: function () {
+      Teacher.ensureDemo();
+      var teachers = Teacher.all(), out = [];
+      try {
+        for (var i = 0; i < localStorage.length; i++) {
+          var k = localStorage.key(i);
+          if (!k || k.indexOf(STUDENTS_PREFIX) !== 0) continue;
+          var tid = k.slice(STUDENTS_PREFIX.length), list = null;
+          try { list = JSON.parse(localStorage.getItem(k)); } catch (e) {}
+          if (!list || !list.length) continue;
+          var t = null;
+          for (var j = 0; j < teachers.length; j++) if (teachers[j].id === tid) t = teachers[j];
+          for (var m = 0; m < list.length; m++) {
+            out.push({ teacherId: tid, teacherName: t ? t.name : "", student: list[m] });
+          }
+        }
+      } catch (e) {}
+      return out;
+    },
     reset: function () {
       try { localStorage.removeItem(studentsKey()); } catch (e) {}
     },
@@ -173,6 +207,30 @@
       try { raw = localStorage.getItem(key); } catch (e) {}
       if (!raw) return 0;
       try { return JSON.parse(raw).length; } catch (e) { return 0; }
+    }
+  };
+
+  /* ---------- 学生端登录态 ----------
+   * 一期同样是身份标识：点名字即进入，二期接微信登录后由 openid 对应本人。
+   */
+  var StuSession = {
+    get: function () { return readJSON(STU_SESSION_KEY, null); },
+    set: function (teacherId, studentId) { writeJSON(STU_SESSION_KEY, { teacherId: teacherId, studentId: studentId }); },
+    clear: function () { try { localStorage.removeItem(STU_SESSION_KEY); } catch (e) {} }
+  };
+
+  /* ---------- 作业完成状态 ----------
+   * 只记学生本地的完成打勾，属于“练习记录”，不参与学情计算、不写回学生档案。
+   */
+  var Homework = {
+    key: function (teacherId, studentId) { return HW_PREFIX + teacherId + "." + studentId; },
+    get: function (teacherId, studentId) { return readJSON(Homework.key(teacherId, studentId), {}); },
+    mark: function (teacherId, studentId, qid, done) {
+      var m = Homework.get(teacherId, studentId);
+      if (done) m[qid] = new Date().toISOString().slice(0, 10);
+      else delete m[qid];
+      writeJSON(Homework.key(teacherId, studentId), m);
+      return m;
     }
   };
 
@@ -281,6 +339,8 @@
   };
 
   window.KBStore = Store;
+  window.KBStuSession = StuSession;
+  window.KBHomework = Homework;
   window.KBTeacher = Teacher;
   window.KBData = KB;
   window.KBAnalyze = Analyze;

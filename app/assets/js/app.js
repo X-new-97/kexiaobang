@@ -82,9 +82,30 @@
       });
       h += '</div></div>';
     }
+    /* 学生入口：列出本机全部学生（跨老师账号），点名字直接进入学生工作台 */
+    h += '<div class="login-sep"><span>我是学生</span></div><div class="chips">';
+    var stus = S.allAcrossTeachers ? S.allAcrossTeachers() : [];
+    if (!stus.length) {
+      h += '<span class="muted small">本机还没有学生档案，先用老师账号添加学生。</span>';
+    }
+    stus.forEach(function (x) {
+      h += '<button class="chip-btn" data-stu="' + esc(x.teacherId) + '|' + esc(x.studentId) + '">' +
+        esc(x.student.name) + (x.teacherName ? ' <em>' + esc(x.teacherName) + '的学生</em>' : '') + '</button>';
+    });
+    h += '</div><p class="muted small">点名字即进入学生工作台：闯关练习、看课后记录、做作业。' +
+      '演示版不校验身份，二期接微信登录后由扫码对应本人学情。</p>';
+
     h += '<p class="login-note">演示版不校验密码：登录用于区分不同老师的数据，二期接入微信登录与云数据库后才是真实账号体系。</p>' +
       '</div>';
     return h;
+  }
+
+  /* 学生端登录：记住 {老师id, 学生id}，进入独立的学生工作台 */
+  function bootStudent(teacherId, studentId) {
+    if (!window.KBStudent) { showLogin(); return; }
+    if (window.KBStuSession) window.KBStuSession.set(teacherId, studentId);
+    T.logout();   /* 同时只保留一种身份，避免两个工作台都有登录态 */
+    window.KBStudent.boot(teacherId, studentId, showLogin);
   }
 
   function bindLogin() {
@@ -110,6 +131,12 @@
         bootWorkspace(T.current(), false);
       };
     });
+    Array.prototype.forEach.call(document.querySelectorAll("[data-stu]"), function (b) {
+      b.onclick = function () {
+        var p = b.getAttribute("data-stu").split("|");
+        bootStudent(p[0], p[1]);
+      };
+    });
   }
 
   function showLogin() {
@@ -118,13 +145,16 @@
     v.style.display = "";
     v.innerHTML = loginHtml();
     $("app-shell").style.display = "none";
+    if ($("student-shell")) $("student-shell").style.display = "none";
     bindLogin();
   }
 
   function bootWorkspace(teacher, created) {
     if (!teacher) { showLogin(); return; }
+    if (window.KBStuSession) window.KBStuSession.clear();
     $("login-view").style.display = "none";
     $("app-shell").style.display = "";
+    if ($("student-shell")) $("student-shell").style.display = "none";
     state.studentId = null;
     state.showAdd = false;
     resetFlow();
@@ -746,6 +776,7 @@
     var out = $("btn-logout");
     if (out) out.onclick = function () {
       T.logout();
+      if (window.KBStuSession) window.KBStuSession.clear();
       state.studentId = null;
       state.showAdd = false;
       resetFlow();
@@ -753,8 +784,11 @@
       toast("已退出，数据仍保留在本机");
     };
 
+    /* 刷新恢复：学生端会话优先，其次老师端，都没有则回登录页 */
+    var ss = window.KBStuSession ? window.KBStuSession.get() : null;
     var cur = T.current();
-    if (cur) bootWorkspace(cur, false);
+    if (ss) bootStudent(ss.teacherId, ss.studentId);
+    else if (cur) bootWorkspace(cur, false);
     else showLogin();
   });
 
