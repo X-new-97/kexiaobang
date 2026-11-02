@@ -147,10 +147,54 @@
     try { window.scrollTo(0, 0); } catch (e) {}
   }
 
+  /* 趋势折线图：内联 SVG，不依赖图表库 */
+  function trendChart(his) {
+    var n = his.length;
+    var pts = his.map(function (h, i) {
+      return {
+        x: n === 1 ? 50 : (i / (n - 1)) * 100,
+        y: (1 - h.rate / 100) * 100,
+        h: h
+      };
+    });
+    var line = pts.map(function (p, i) {
+      return (i ? "L" : "M") + p.x.toFixed(2) + " " + p.y.toFixed(2);
+    }).join(" ");
+    var area = line + " L" + pts[n - 1].x.toFixed(2) + " 100 L" + pts[0].x.toFixed(2) + " 100 Z";
+
+    var grid = [0, 50, 100].map(function (v) {
+      return '<line x1="0" y1="' + v + '" x2="100" y2="' + v +
+        '" stroke="#E6EBF1" stroke-width="1" vector-effect="non-scaling-stroke"/>';
+    }).join("");
+
+    var dots = pts.map(function (p, i) {
+      var cls = i === 0 ? " first" : (i === n - 1 ? " last" : "");
+      return '<span class="chart-dot" style="left:' + p.x.toFixed(2) + '%;top:' + p.y.toFixed(2) + '%"></span>' +
+        '<span class="chart-val' + cls + '" style="left:' + p.x.toFixed(2) + '%;top:' + p.y.toFixed(2) + '%">' + p.h.rate + '%</span>' +
+        '<span class="chart-date' + cls + '" style="left:' + p.x.toFixed(2) + '%">' + esc(p.h.date.slice(5)) + '</span>';
+    }).join("");
+
+    return '<div class="chart">' +
+      '<div class="chart-y"><span>100%</span><span>50%</span><span>0%</span></div>' +
+      '<div class="chart-plot">' +
+        '<svg class="chart-svg" viewBox="0 0 100 100" preserveAspectRatio="none" aria-hidden="true">' +
+          '<defs><linearGradient id="trendFill" x1="0" y1="0" x2="0" y2="1">' +
+            '<stop offset="0%" stop-color="#7DA9D9" stop-opacity=".22"/>' +
+            '<stop offset="100%" stop-color="#7DA9D9" stop-opacity="0"/>' +
+          '</linearGradient></defs>' +
+          grid +
+          '<path d="' + area + '" fill="url(#trendFill)"/>' +
+          '<path d="' + line + '" fill="none" stroke="#7DA9D9" stroke-width="2.5" ' +
+            'vector-effect="non-scaling-stroke" stroke-linejoin="round" stroke-linecap="round"/>' +
+        '</svg>' + dots +
+      '</div>' +
+    '</div>';
+  }
+
   /* ---------- 学生档案 ---------- */
   function renderStudents() {
     var list = S.all();
-    var html = '<div class="grid">';
+    var html = '<div class="grid"><div class="col-left">';
 
     html += '<div class="list-head"><span class="weui-cells__title">学生列表（' + list.length + '）</span>' +
       '<button class="weui-btn weui-btn_primary weui-btn_mini" id="btn-add-toggle">' +
@@ -177,7 +221,8 @@
         '<div class="weui-cell__ft">' + esc(s.grade) + ' · ' + (s.lessons ? s.lessons.length : 0) + ' 次课</div>' +
         '</div>';
     });
-    html += '</div>';
+    html += '</div>';   /* 关闭 .stu-list */
+    html += '</div>';   /* 关闭 .col-left */
 
     var stu = student();
     html += '<div class="card">';
@@ -196,14 +241,34 @@
         html += '<span class="chip ' + w.status + '">' + esc(w.kp.name) + ' · ' + STATUS[w.status] + '</span>';
       });
       html += '</div>';
-      html += '<h3>历史正确率趋势</h3><div class="trend">';
-      his.forEach(function (h) {
-        html += '<div class="trend-item"><span class="trend-date">' + esc(h.date) + '</span>' +
-          '<div class="trend-bar"><span style="width:' + h.rate + '%"></span></div>' +
-          '<span class="trend-val">' + h.rate + '%</span></div>';
-      });
-      if (!his.length) html += '<span class="muted small">暂无历史记录</span>';
-      html += '</div>';
+      html += '<h3>历史正确率趋势</h3>';
+      if (his.length) html += trendChart(his);
+      else html += '<p class="muted small">暂无历史记录</p>';
+
+      if (stu.lessons && stu.lessons.length) {
+        var kpIdx = D.kpIndex();
+        var start = Math.max(0, stu.lessons.length - 5);
+        var recent = [];
+        /* 与折线图共用 A.history() 的 rate，避免同一节课出现两个百分比 */
+        for (var li = stu.lessons.length - 1; li >= start; li--) {
+          recent.push({ l: stu.lessons[li], rate: his[li] ? his[li].rate : null });
+        }
+        html += '<h3>最近 ' + recent.length + ' 次课</h3><div class="lesson-list">';
+        recent.forEach(function (item) {
+          var l = item.l;
+          var names = (l.kpIds || []).map(function (id) {
+            return kpIdx[id] ? kpIdx[id].kp.name : id;
+          }).join('、');
+          html += '<div class="lesson-row">' +
+            '<span class="lesson-date">' + esc((l.date || '').slice(5)) + '</span>' +
+            '<span class="lesson-kps">' + esc(names) +
+              (l.note ? '<small>' + esc(l.note) + '</small>' : '') + '</span>' +
+            '<span class="lesson-rate">' + (item.rate == null ? '—' : item.rate + '%') + '</span>' +
+          '</div>';
+        });
+        html += '</div>';
+      }
+
       html += '<div class="actions">' +
         '<button class="weui-btn weui-btn_primary" id="btn-to-plan">为 TA 生成备课包</button>' +
         '<button class="weui-btn weui-btn_default weui-btn_mini" id="btn-del-stu">' +
@@ -363,7 +428,10 @@
       return;
     }
     if (!state.plan) {
-      var rec = A.priorityKps(stu).slice(0, 6);
+      /* 推荐里只保留题库有题的知识点，避免点进去是空的 */
+      var rec = A.priorityKps(stu).filter(function (r) {
+        return D.questionsOf(r.id).length > 0;
+      }).slice(0, 6);
       if (!state.selectedInit) {
         state.selectedInit = true;
         state.selected = rec.slice(0, 3).map(function (r) { return r.id; });
@@ -383,8 +451,10 @@
         u.kps.forEach(function (kp) {
           var st = stu.mastery[kp.id];
           var on = state.selected.indexOf(kp.id) !== -1;
-          html += '<button class="chip-btn ' + (st || "") + (on ? " on" : "") + '" data-kp="' + kp.id + '">' +
-            esc(kp.name) + (st ? ' <em>' + STATUS[st] + '</em>' : '') + '</button>';
+          var hasQ = D.questionsOf(kp.id).length > 0;
+          html += '<button class="chip-btn ' + (st || "") + (on ? " on" : "") + (hasQ ? "" : " noq") +
+            '" data-kp="' + kp.id + '"' + (hasQ ? "" : ' disabled title="题库待补充"') + '>' +
+            esc(kp.name) + (hasQ ? (st ? ' <em>' + STATUS[st] + '</em>' : '') : ' <em>暂无题目</em>') + '</button>';
         });
         html += '</div></div>';
       });
@@ -403,6 +473,14 @@
       });
       $("btn-gen").onclick = function () {
         if (!state.selected.length) { toast("请至少勾选一个知识点"); return; }
+        var usable = state.selected.filter(function (id) {
+          return D.questionsOf(id).length > 0;
+        });
+        if (!usable.length) { toast("所选知识点暂无题目，请换一个有题目的知识点"); return; }
+        if (usable.length < state.selected.length) {
+          toast("已跳过 " + (state.selected.length - usable.length) + " 个暂无题目的知识点");
+        }
+        state.selected = usable;
         $("gen-tip").textContent = "正在根据学情档案生成…";
         $("btn-gen").disabled = true;
         setTimeout(function () {
@@ -510,6 +588,7 @@
       '<p class="muted small">每题一键勾选，系统据此更新学情档案并生成课后反馈。</p>';
     var n = 0;
     p.sections.forEach(function (s) {
+      if (!s.questions.length) return;   /* 没题的知识点不渲染，避免空标题 */
       html += '<div class="section"><h3>' + esc(s.kpName) + '</h3><ul class="qlist">';
       s.questions.forEach(function (item) {
         n++;
@@ -523,8 +602,13 @@
       });
       html += '</ul></div>';
     });
-    html += '<div class="actions"><button class="weui-btn weui-btn_primary" id="btn-fb">保存并生成课后反馈</button>' +
-      (state.saved ? '<span class="muted small">已写入学情档案</span>' : '') + '</div></div>';
+    if (!n) {
+      html += '<p class="muted">本次备课包暂无题目，请返回「智能备课」选择有题目的知识点。</p>';
+    } else {
+      html += '<div class="actions"><button class="weui-btn weui-btn_primary" id="btn-fb">保存并生成课后反馈</button>' +
+        (state.saved ? '<span class="muted small">已写入学情档案</span>' : '') + '</div>';
+    }
+    html += '</div>';
     $("view-record").innerHTML = html;
 
     Array.prototype.forEach.call(document.querySelectorAll("[data-mark]"), function (b) {
@@ -533,7 +617,7 @@
         renderRecord();
       };
     });
-    $("btn-fb").onclick = function () {
+    if ($("btn-fb")) $("btn-fb").onclick = function () {
       var stu = S.get(state.studentId);
       state.feedback = E.buildFeedback(stu, p, state.results);
       if (!state.saved) {
