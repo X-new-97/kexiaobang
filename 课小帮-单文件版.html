@@ -500,6 +500,23 @@ h3 { font-size: 14px; font-weight: 700; margin: 20px 0 8px; color: var(--text-su
 }
 .login-accounts { margin-top: 14px; }
 .login-accounts .chips { margin-top: 6px; }
+/* 学生入口：两列卡片网格，比 chips 更整齐、点击区域更大 */
+.stu-list {
+  display: grid; grid-template-columns: 1fr 1fr; gap: 9px;
+  margin: 4px 0 8px;
+}
+.stu-item {
+  display: block; width: 100%; text-align: left;
+  padding: 10px 12px;
+  background: var(--paper);
+  border: 1.5px solid var(--border-strong);
+  border-radius: 12px 15px 12px 15px / 15px 12px 15px 12px;
+  box-shadow: 0 2px 0 var(--shadow);
+  cursor: pointer; font-family: inherit;
+}
+.stu-item:active { transform: translateY(1px); box-shadow: 0 1px 0 var(--shadow); }
+.stu-item-name { display: block; font-weight: 700; font-size: 15px; }
+.stu-item-sub { display: block; font-size: 11px; color: var(--text-sub); margin-top: 2px; }
 .login-note {
   font-size: 12px; color: var(--text-sub); line-height: 1.6;
   margin: 14px 0 0; padding-top: 12px; border-top: 1.5px dashed var(--border-strong);
@@ -2534,9 +2551,9 @@ window.KB_SAMPLE_STUDENTS = [
       '<div class="form-row"><label for="login-name">老师姓名</label>' +
       '<input id="login-name" class="weui-input" type="text" maxlength="12" placeholder="例如：张老师"></div>' +
       '<div class="actions"><button class="weui-btn weui-btn_primary" id="btn-login">进入工作台</button></div>' +
-      '<p class="muted small">输入姓名即可进入；同名视为同一位老师，学生档案按老师分开保存。</p>' +
+      '<p class="muted small">输入姓名即可进入，同名视为同一位老师。</p>' +
       '<div class="login-sep"><span>或</span></div>' +
-      '<button class="weui-btn weui-btn_default" id="btn-demo">使用演示账号（含 3 位学生与历史学情）</button>';
+      '<button class="weui-btn weui-btn_default" id="btn-demo">使用演示账号（含示例学生与学情）</button>';
     if (others.length) {
       h += '<div class="login-accounts"><p class="muted small">本机已有账号（点选直接进入）</p><div class="chips">';
       others.forEach(function (t) {
@@ -2545,17 +2562,20 @@ window.KB_SAMPLE_STUDENTS = [
       h += '</div></div>';
     }
     /* 学生入口：列出本机全部学生（跨老师账号），点名字直接进入学生工作台 */
-    h += '<div class="login-sep"><span>我是学生</span></div><div class="chips">';
+    h += '<div class="login-sep"><span>我是学生</span></div>';
     var stus = S.allAcrossTeachers ? S.allAcrossTeachers() : [];
     if (!stus.length) {
-      h += '<span class="muted small">本机还没有学生档案，先用老师账号添加学生。</span>';
+      h += '<p class="muted small">本机还没有学生档案，先用老师账号添加学生。</p>';
+    } else {
+      h += '<div class="stu-list">';
+      stus.forEach(function (x) {
+        h += '<button class="stu-item" data-stu="' + esc(x.teacherId) + '|' + esc(x.student.id) + '">' +
+          '<span class="stu-item-name">' + esc(x.student.name) + '</span>' +
+          (x.teacherName ? '<span class="stu-item-sub">' + esc(x.teacherName) + '的学生</span>' : '') +
+          '</button>';
+      });
+      h += '</div><p class="muted small">点名字进入学生工作台：闯关练习 · 课后记录 · 作业任务。</p>';
     }
-    stus.forEach(function (x) {
-      h += '<button class="chip-btn" data-stu="' + esc(x.teacherId) + '|' + esc(x.studentId) + '">' +
-        esc(x.student.name) + (x.teacherName ? ' <em>' + esc(x.teacherName) + '的学生</em>' : '') + '</button>';
-    });
-    h += '</div><p class="muted small">点名字即进入学生工作台：闯关练习、看课后记录、做作业。' +
-      '演示版不校验身份，二期接微信登录后由扫码对应本人学情。</p>';
 
     h += '<p class="login-note">演示版不校验密码：登录用于区分不同老师的数据，二期接入微信登录与云数据库后才是真实账号体系。</p>' +
       '</div>';
